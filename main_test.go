@@ -1,29 +1,65 @@
 package main
 
 import (
-	"reflect"
+	"bytes"
+	"fmt"
 	"testing"
 )
 
-func TestParse(t *testing.T) {
+type TokenValue struct {
+	Token
+	Value string
+}
+
+func TestScanner(t *testing.T) {
 	testcases := []struct {
-		Description string
 		Toml        string
-		Tokens      []Token
+		TokenValues []TokenValue
 	}{
 		{
-			Description: "A simple key-value",
-			Toml:        "key = \"value\"",
-			Tokens:      []Token{BARE_KEY, WHITESPACE, ASSIGNMENT, WHITESPACE, STRING, EOF},
+			Toml: "key = \"value\"",
+			TokenValues: []TokenValue{
+				TokenValue{KEY, "key"},
+				TokenValue{WHITESPACE, " "},
+				TokenValue{ASSIGNMENT, "="},
+				TokenValue{WHITESPACE, " "},
+				TokenValue{STRING, "value"},
+			},
+		},
+		{
+			Toml: "\"Quoted key\" = [1,2,3]  # Comments are ignored",
+			TokenValues: []TokenValue{
+				TokenValue{STRING, "Quoted key"},
+				TokenValue{WHITESPACE, " "},
+				TokenValue{ASSIGNMENT, "="},
+				TokenValue{WHITESPACE, " "},
+				TokenValue{BRAKET_OPEN, "["},
+				TokenValue{INTEGER, "1"},
+				TokenValue{COMMA, ","},
+				TokenValue{INTEGER, "2"},
+				TokenValue{COMMA, ","},
+				TokenValue{INTEGER, "3"},
+				TokenValue{BRAKET_CLOSE, "]"},
+				TokenValue{WHITESPACE, "  "},
+				TokenValue{COMMENT, "# Comments are ignored"},
+			},
 		},
 	}
 
 	for _, tc := range testcases {
-		t.Run(tc.Description, func(t *testing.T) {
-			got := Parse(tc.Toml)
+		t.Run(fmt.Sprintf("'%s' should parse to %v", tc.Toml, tc.TokenValues), func(t *testing.T) {
+			scanner := NewScanner(bytes.NewBufferString(tc.Toml))
 
-			if !reflect.DeepEqual(tc.Tokens, got) {
-				t.Errorf("Wanted %v, but got %v", tc.Tokens, got)
+			for _, tv := range tc.TokenValues {
+				token, value := scanner.Scan()
+
+				if token != tv.Token {
+					t.Errorf("Expected token %d, got %d", tv.Token, token)
+				}
+
+				if value != tv.Value {
+					t.Errorf("Expected value '%s', got '%s'", tv.Value, value)
+				}
 			}
 		})
 	}

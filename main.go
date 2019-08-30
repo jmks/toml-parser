@@ -14,12 +14,16 @@ const (
 	WHITESPACE
 
 	// Literals
-	BARE_KEY   // some_key
-	DOTTED_KEY // some.key
-	STRING
+	KEY     // some_key, some.key, "key with spaces"
+	STRING  // "some string"
+	COMMENT // # comment til end of line
+	INTEGER
 
 	// Syntax
-	ASSIGNMENT
+	ASSIGNMENT   // =
+	BRAKET_OPEN  // [
+	BRAKET_CLOSE // ]
+	COMMA        // ,
 
 	// Keywords
 )
@@ -56,14 +60,26 @@ func (s *Scanner) Scan() (Token, string) {
 	if isWhitespace(rune) {
 		s.unread()
 		return s.scanWhiteSpace()
+	} else if isNumeric(rune) {
+		s.unread()
+		return s.scanNumeric()
 	} else if isBareKeyLetter(rune) {
 		s.unread()
-		return s.scanBareKey()
+		return s.scanKey()
 	}
 
 	switch rune {
 	case eof:
 		return EOF, ""
+	case '[':
+		return BRAKET_OPEN, "["
+	case ']':
+		return BRAKET_CLOSE, "]"
+	case ',':
+		return COMMA, ","
+	case '#':
+		s.unread()
+		return COMMENT, s.scanToEndOfLine()
 	case '"':
 		return STRING, s.scanString()
 	case '=':
@@ -94,7 +110,8 @@ func (s *Scanner) scanWhiteSpace() (Token, string) {
 	return WHITESPACE, buffer.String()
 }
 
-func (s *Scanner) scanBareKey() (Token, string) {
+// Note: does not support dotted keys
+func (s *Scanner) scanKey() (Token, string) {
 	var buffer bytes.Buffer
 
 	buffer.WriteRune(s.read())
@@ -112,7 +129,26 @@ func (s *Scanner) scanBareKey() (Token, string) {
 		}
 	}
 
-	return BARE_KEY, buffer.String()
+	return KEY, buffer.String()
+}
+
+func (s *Scanner) scanNumeric() (Token, string) {
+	var buffer bytes.Buffer
+
+	for {
+		rune := s.read()
+
+		if rune == eof {
+			break
+		} else if !isDigit(rune) {
+			s.unread()
+			break
+		} else {
+			buffer.WriteRune(rune)
+		}
+	}
+
+	return INTEGER, buffer.String()
 }
 
 // scanString is a bit naive right now
@@ -127,8 +163,6 @@ func (s *Scanner) scanString() string {
 			break
 		} else if rune == '"' {
 			break
-		} else if !isBareKeyLetter(rune) {
-			break
 		} else {
 			buffer.WriteRune(rune)
 		}
@@ -137,25 +171,13 @@ func (s *Scanner) scanString() string {
 	return buffer.String()
 }
 
-func main() {}
+func (s *Scanner) scanToEndOfLine() string {
+	rest, _ := s.r.ReadString('\n')
 
-func Parse(toml string) []Token {
-	tokens := []Token{}
-
-	scanner := NewScanner(bytes.NewBufferString(toml))
-
-	for {
-		token, _ := scanner.Scan()
-
-		tokens = append(tokens, token)
-
-		if token == EOF {
-			break
-		}
-	}
-
-	return tokens
+	return rest
 }
+
+func main() {}
 
 func isWhitespace(r rune) bool {
 	return r == ' ' || r == '\t'
@@ -175,4 +197,8 @@ func isDashOrUnderscore(r rune) bool {
 
 func isBareKeyLetter(r rune) bool {
 	return isLetter(r) || isDigit(r) || isDashOrUnderscore(r)
+}
+
+func isNumeric(r rune) bool {
+	return isDigit(r)
 }
